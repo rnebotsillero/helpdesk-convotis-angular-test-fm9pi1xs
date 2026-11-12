@@ -20,12 +20,12 @@
   <p class="muted">Cargando tickets…</p>
 }
 
-@if (errorMessage) {
-  <p class="error">{{ errorMessage }}</p>
+@if (errorMessage()) {
+  <p class="error">{{ errorMessage() }}</p>
 }
 
 <div class="list">
-  @for (ticket of filtered(); track $index) {
+  @for (ticket of filtered(); track ticket.id) {
     <app-ticket-row [ticket]="ticket" (click)="open(ticket)" />
   } @empty {
     <p class="muted">No hay tickets que mostrar.</p>
