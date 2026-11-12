@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
-import { Ticket, TicketPriority, TicketStatus } from '../models/ticket';
+import { Ticket, TicketComment, TicketPriority, TicketStatus } from '../models/ticket';
 
 export interface TicketSearchParams {
   q?: string;
@@ -29,12 +29,21 @@ export class TicketsApi {
     return this.http.patch(`/api/tickets/${id}`, { status });
   }
 
-  addComment(id: string, body: string): Observable<any> {
-    return this.http.post(`/api/tickets/${id}/comments`, { body });
+  addComment(id: string, body: string): Observable<TicketComment> {
+    return this.http
+      .post<unknown>(`/api/tickets/${id}/comments`, { body })
+      .pipe(map((dto) => this.toComment(dto)));
   }
 
   // TODO: tipar el contrato del servidor
   toTicket(dto: any): Ticket {
+    const comments = (dto.comments ?? [])
+      .map((c: any) => this.toComment(c))
+      .sort(
+        (a: TicketComment, b: TicketComment) =>
+          a.createdAt.getTime() - b.createdAt.getTime(),
+      );
+
     return {
       id: dto.id,
       title: dto.title,
@@ -45,12 +54,16 @@ export class TicketsApi {
       assignee: dto.assignee,
       createdAt: new Date(dto.created_at),
       closedAt: dto.closed_at ? new Date(dto.closed_at) : null,
-      comments: (dto.comments ?? []).map((c: any) => ({
-        id: c.id,
-        author: c.author,
-        bodyHtml: c.body_html,
-        createdAt: new Date(c.created_at),
-      })),
+      comments,
+    };
+  }
+
+  toComment(dto: any): TicketComment {
+    return {
+      id: dto.id,
+      author: dto.author,
+      bodyHtml: dto.body_html ?? dto.bodyHtml ?? '',
+      createdAt: new Date(dto.created_at ?? dto.createdAt),
     };
   }
 }

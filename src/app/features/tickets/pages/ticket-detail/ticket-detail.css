@@ -11,3 +11,10 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .actions h2 { width: 100%; }
 .comment { padding: 10px 0; border-top: 1px solid var(--border); }
+.comment-form { display: grid; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.comment-form-note { margin-top: 16px; }
+.comment-label { font-weight: 600; }
+.comment-hint { margin: 0; font-size: 13px; }
+.comment-form textarea { width: 100%; resize: vertical; }
+.comment-form textarea[aria-invalid='true'] { border-color: var(--danger); }
+.comment-form button { justify-self: start; }

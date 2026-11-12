@@ -9,6 +9,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { EMPTY, catchError, distinctUntilChanged, map, switchMap, timer } from 'rxjs';
 import { TicketsApi } from '../../data/tickets-api';
@@ -18,10 +19,14 @@ import { allowedTransitions } from '../../domain/status-transitions';
 
 const GENERIC_STATUS_ERROR =
   'No se ha podido cambiar el estado. Inténtalo de nuevo.';
+const GENERIC_COMMENT_ERROR =
+  'No se ha podido enviar el comentario. Inténtalo de nuevo.';
+const COMMENT_MIN = 10;
+const COMMENT_MAX = 500;
 
 @Component({
   selector: 'app-ticket-detail',
-  imports: [RouterLink, DatePipe],
+  imports: [RouterLink, DatePipe, FormsModule],
   templateUrl: './ticket-detail.html',
   styleUrl: './ticket-detail.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -33,6 +38,8 @@ export class TicketDetail {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly statusLabels = STATUS_LABELS;
+  protected readonly commentMin = COMMENT_MIN;
+  protected readonly commentMax = COMMENT_MAX;
 
   private readonly ticketId = signal(this.route.snapshot.paramMap.get('id')!);
 
@@ -40,7 +47,16 @@ export class TicketDetail {
   protected readonly notFound = signal(false);
   protected readonly savingStatus = signal(false);
   protected readonly statusError = signal('');
+  protected readonly commentDraft = signal('');
+  protected readonly submittingComment = signal(false);
+  protected readonly commentError = signal('');
+  protected readonly commentTouched = signal(false);
+
   protected readonly canEdit = computed(() => !!this.ticket() && !this.savingStatus());
+  protected readonly canComment = computed(() => {
+    const t = this.ticket();
+    return !!t && t.status !== 'closed' && !this.submittingComment();
+  });
   protected readonly nextStatuses = computed(() => {
     const t = this.ticket();
     return t ? allowedTransitions(t) : [];
@@ -49,6 +65,21 @@ export class TicketDetail {
     const t = this.ticket();
     return t ? slaState(t) : null;
   });
+  protected readonly commentLength = computed(() => this.commentDraft().trim().length);
+  protected readonly commentValidationError = computed(() => {
+    if (!this.commentTouched() && !this.commentDraft()) {
+      return '';
+    }
+    const length = this.commentLength();
+    if (length < COMMENT_MIN) {
+      return `El comentario debe tener al menos ${COMMENT_MIN} caracteres (ahora ${length}).`;
+    }
+    if (this.commentDraft().length > COMMENT_MAX) {
+      return `El comentario no puede superar ${COMMENT_MAX} caracteres.`;
+    }
+    return '';
+  });
+  protected readonly commentInvalid = computed(() => !!this.commentValidationError());
 
   protected readonly prevId = computed(() => this.siblingId(-1));
   protected readonly nextId = computed(() => this.siblingId(+1));
@@ -66,6 +97,10 @@ export class TicketDetail {
         this.notFound.set(false);
         this.statusError.set('');
         this.savingStatus.set(false);
+        this.commentDraft.set('');
+        this.commentError.set('');
+        this.commentTouched.set(false);
+        this.submittingComment.set(false);
 
         return timer(0, 5000).pipe(
           switchMap(() =>
@@ -110,6 +145,52 @@ export class TicketDetail {
         error: (err: unknown) => {
           this.statusError.set(this.serverErrorMessage(err, GENERIC_STATUS_ERROR));
           this.savingStatus.set(false);
+        },
+      });
+  }
+
+  protected onCommentInput(value: string): void {
+    this.commentDraft.set(value);
+    this.commentError.set('');
+  }
+
+  protected submitComment(): void {
+    const current = this.ticket();
+    this.commentTouched.set(true);
+
+    if (!current || current.status === 'closed' || this.submittingComment()) {
+      return;
+    }
+    if (this.commentInvalid()) {
+      return;
+    }
+
+    const body = this.commentDraft().trim();
+    this.submittingComment.set(true);
+    this.commentError.set('');
+
+    this.api
+      .addComment(current.id, body)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (comment) => {
+          const ticket = this.ticket();
+          if (ticket) {
+            this.ticket.set({
+              ...ticket,
+              comments: [...ticket.comments, comment].sort(
+                (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+              ),
+            });
+          }
+          this.commentDraft.set('');
+          this.commentTouched.set(false);
+          this.submittingComment.set(false);
+        },
+        error: () => {
+          // No se limpia commentDraft: el usuario no pierde lo escrito
+          this.commentError.set(GENERIC_COMMENT_ERROR);
+          this.submittingComment.set(false);
         },
       });
   }

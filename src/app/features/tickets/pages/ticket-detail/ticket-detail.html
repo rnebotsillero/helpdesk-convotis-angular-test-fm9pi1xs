@@ -61,5 +61,46 @@
     } @empty {
       <p class="muted">Todavía no hay comentarios.</p>
     }
+
+    @if (t.status === 'closed') {
+      <p class="muted comment-form-note">No se pueden añadir comentarios a un ticket cerrado.</p>
+    } @else {
+      <form class="comment-form" (ngSubmit)="submitComment()">
+        <label class="comment-label" for="new-comment">Nuevo comentario</label>
+        <textarea
+          id="new-comment"
+          rows="4"
+          [ngModel]="commentDraft()"
+          (ngModelChange)="onCommentInput($event)"
+          (blur)="commentTouched.set(true)"
+          name="comment"
+          [disabled]="submittingComment()"
+          [attr.maxlength]="commentMax"
+          [attr.aria-invalid]="commentInvalid()"
+          aria-describedby="comment-hint comment-validation comment-submit-error"
+        ></textarea>
+        <p id="comment-hint" class="muted comment-hint">
+          Entre {{ commentMin }} y {{ commentMax }} caracteres
+          ({{ commentLength() }}/{{ commentMax }} sin contar espacios extremos).
+        </p>
+        @if (commentValidationError()) {
+          <p id="comment-validation" class="error" role="alert">{{ commentValidationError() }}</p>
+        }
+        @if (commentError()) {
+          <p id="comment-submit-error" class="error" role="alert">{{ commentError() }}</p>
+        }
+        <button
+          type="submit"
+          class="primary"
+          [disabled]="!canComment() || commentInvalid() || !commentDraft().trim()"
+        >
+          @if (submittingComment()) {
+            Enviando…
+          } @else {
+            Añadir comentario
+          }
+        </button>
+      </form>
+    }
   </section>
 }
