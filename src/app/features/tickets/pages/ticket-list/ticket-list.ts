@@ -57,6 +57,7 @@ export class TicketList {
         switchMap((term) =>
           this.api.search(term).pipe(
             catchError(() => {
+              this.tickets.set([]);
               this.errorMessage.set('No se han podido cargar los tickets.');
               this.loading.set(false);
               return EMPTY;
