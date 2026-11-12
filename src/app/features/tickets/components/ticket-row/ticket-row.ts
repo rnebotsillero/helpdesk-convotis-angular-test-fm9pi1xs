@@ -18,7 +18,9 @@ import { slaState } from '../../domain/sla';
           {{ statusLabel() }} · {{ ticket().requester }} · {{ ticket().createdAt | date: 'short' }}
         </div>
       </div>
-      <span class="sla" [class]="'sla ' + sla()">{{ sla() }}</span>
+      @if (sla(); as s) {
+        <span class="sla" [class]="'sla ' + s">{{ s }}</span>
+      }
     </div>
   `,
   styles: `
