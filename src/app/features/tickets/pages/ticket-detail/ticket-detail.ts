@@ -15,6 +15,7 @@ import { EMPTY, catchError, distinctUntilChanged, map, switchMap, timer } from '
 import { TicketsApi } from '../../data/tickets-api';
 import { STATUS_LABELS, Ticket, TicketStatus } from '../../models/ticket';
 import { slaState } from '../../domain/sla';
+import { allowedTransitions } from '../../domain/status-transitions';
 
 const GENERIC_STATUS_ERROR =
   'No se ha podido cambiar el estado. Inténtalo de nuevo.';
@@ -34,7 +35,6 @@ export class TicketDetail {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly statusLabels = STATUS_LABELS;
-  protected readonly statuses = Object.keys(STATUS_LABELS) as TicketStatus[];
 
   private readonly ticketId = signal(this.route.snapshot.paramMap.get('id')!);
 
@@ -43,6 +43,10 @@ export class TicketDetail {
   protected readonly savingStatus = signal(false);
   protected readonly statusError = signal('');
   protected readonly canEdit = computed(() => !!this.ticket() && !this.savingStatus());
+  protected readonly nextStatuses = computed(() => {
+    const t = this.ticket();
+    return t ? allowedTransitions(t) : [];
+  });
   protected readonly sla = computed(() => {
     const t = this.ticket();
     return t ? slaState(t) : null;
@@ -85,7 +89,12 @@ export class TicketDetail {
 
   protected changeStatus(status: TicketStatus): void {
     const current = this.ticket();
-    if (!current || this.savingStatus() || status === current.status) {
+    if (
+      !current ||
+      this.savingStatus() ||
+      status === current.status ||
+      !allowedTransitions(current).includes(status)
+    ) {
       return;
     }
 

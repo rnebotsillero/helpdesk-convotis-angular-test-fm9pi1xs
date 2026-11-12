@@ -31,10 +31,14 @@
 
     <section class="actions">
       <h2>Cambiar estado</h2>
-      @for (s of statuses; track s) {
-        <button (click)="changeStatus(s)" [disabled]="!canEdit() || s === t.status">
-          {{ statusLabels[s] }}
-        </button>
+      @if (nextStatuses().length === 0) {
+        <p class="muted">No hay transiciones disponibles para este ticket.</p>
+      } @else {
+        @for (s of nextStatuses(); track s) {
+          <button (click)="changeStatus(s)" [disabled]="!canEdit()">
+            {{ statusLabels[s] }}
+          </button>
+        }
       }
       @if (savingStatus()) {
         <p class="muted">Guardando estado…</p>
