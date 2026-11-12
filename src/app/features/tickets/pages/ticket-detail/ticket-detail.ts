@@ -1,8 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpClient } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { EMPTY, catchError, distinctUntilChanged, map, switchMap, timer } from 'rxjs';
 import { TicketsApi } from '../../data/tickets-api';
 import { STATUS_LABELS, Ticket, TicketStatus } from '../../models/ticket';
 import { slaState } from '../../domain/sla';
@@ -23,7 +31,7 @@ export class TicketDetail {
   protected readonly statusLabels = STATUS_LABELS;
   protected readonly statuses = Object.keys(STATUS_LABELS) as TicketStatus[];
 
-  private readonly ticketId = this.route.snapshot.paramMap.get('id')!;
+  private readonly ticketId = signal(this.route.snapshot.paramMap.get('id')!);
 
   protected readonly ticket = signal<Ticket | undefined>(undefined);
   protected readonly notFound = signal(false);
@@ -33,19 +41,36 @@ export class TicketDetail {
     return t ? slaState(t) : null;
   });
 
-  protected readonly prevId = this.siblingId(-1);
-  protected readonly nextId = this.siblingId(+1);
+  protected readonly prevId = computed(() => this.siblingId(-1));
+  protected readonly nextId = computed(() => this.siblingId(+1));
 
   constructor() {
-    this.load();
-    // Refresco automático para ver comentarios nuevos
-    setInterval(() => this.load(), 5000);
-  }
+    const id$ = this.route.paramMap.pipe(
+      map((params) => params.get('id')!),
+      distinctUntilChanged(),
+    );
 
-  private load(): void {
-    this.http.get<any>(`/api/tickets/${this.ticketId}`).subscribe({
-      next: (dto) => this.ticket.set(this.api.toTicket(dto)),
-      error: () => this.notFound.set(true),
+    id$.pipe(
+      switchMap((id) => {
+        this.ticketId.set(id);
+        this.ticket.set(undefined);
+        this.notFound.set(false);
+
+        return timer(0, 5000).pipe(
+          switchMap(() =>
+            this.http.get<unknown>(`/api/tickets/${id}`).pipe(
+              catchError(() => {
+                this.notFound.set(true);
+                return EMPTY;
+              }),
+            ),
+          ),
+        );
+      }),
+      takeUntilDestroyed(),
+    ).subscribe((dto) => {
+      this.notFound.set(false);
+      this.ticket.set(this.api.toTicket(dto));
     });
   }
 
@@ -61,7 +86,7 @@ export class TicketDetail {
   }
 
   private siblingId(offset: number): string {
-    const n = Number(this.ticketId.replace('T-', '')) + offset;
+    const n = Number(this.ticketId().replace('T-', '')) + offset;
     return `T-${n}`;
   }
 }
