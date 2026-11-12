@@ -19,7 +19,12 @@ import {
   switchMap,
   tap,
 } from 'rxjs';
-import { TicketSearchParams, TicketsApi } from '../../data/tickets-api';
+import { TicketsApi } from '../../data/tickets-api';
+import {
+  isTicketPriority,
+  isTicketStatus,
+  parseTicketSearchParams,
+} from '../../domain/ticket-filters';
 import {
   PRIORITY_LABELS,
   STATUS_LABELS,
@@ -54,11 +59,11 @@ export class TicketList {
   protected readonly searchDraft = signal(this.searchFromUrl());
   protected readonly statusFilter = computed(() => {
     const value = this.queryParams().get('status');
-    return this.isStatus(value) ? value : 'all';
+    return isTicketStatus(value) ? value : 'all';
   });
   protected readonly priorityFilter = computed(() => {
     const value = this.queryParams().get('priority');
-    return this.isPriority(value) ? value : 'all';
+    return isTicketPriority(value) ? value : 'all';
   });
 
   protected readonly tickets = signal<Ticket[]>([]);
@@ -79,7 +84,7 @@ export class TicketList {
     // URL → API (reload y atrás/adelante incluidos)
     this.route.queryParamMap
       .pipe(
-        map((params) => this.filtersFromParams(params)),
+        map((params) => parseTicketSearchParams(params)),
         distinctUntilChanged(
           (a, b) => a.q === b.q && a.status === b.status && a.priority === b.priority,
         ),
@@ -131,23 +136,5 @@ export class TicketList {
       queryParams,
       queryParamsHandling: 'merge',
     });
-  }
-
-  private filtersFromParams(params: { get(name: string): string | null }): TicketSearchParams {
-    const status = params.get('status');
-    const priority = params.get('priority');
-    return {
-      q: params.get('q') ?? '',
-      status: this.isStatus(status) ? status : undefined,
-      priority: this.isPriority(priority) ? priority : undefined,
-    };
-  }
-
-  private isStatus(value: string | null): value is TicketStatus {
-    return !!value && value in STATUS_LABELS;
-  }
-
-  private isPriority(value: string | null): value is TicketPriority {
-    return !!value && value in PRIORITY_LABELS;
   }
 }

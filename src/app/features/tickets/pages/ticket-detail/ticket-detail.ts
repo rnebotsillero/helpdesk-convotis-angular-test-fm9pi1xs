@@ -14,6 +14,12 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { EMPTY, catchError, distinctUntilChanged, map, switchMap, timer } from 'rxjs';
 import { TicketsApi } from '../../data/tickets-api';
 import { STATUS_LABELS, Ticket, TicketStatus } from '../../models/ticket';
+import {
+  COMMENT_MAX_LENGTH,
+  COMMENT_MIN_LENGTH,
+  canAddComment,
+  validateComment,
+} from '../../domain/comments';
 import { slaState } from '../../domain/sla';
 import { allowedTransitions } from '../../domain/status-transitions';
 
@@ -21,8 +27,6 @@ const GENERIC_STATUS_ERROR =
   'No se ha podido cambiar el estado. Inténtalo de nuevo.';
 const GENERIC_COMMENT_ERROR =
   'No se ha podido enviar el comentario. Inténtalo de nuevo.';
-const COMMENT_MIN = 10;
-const COMMENT_MAX = 500;
 
 @Component({
   selector: 'app-ticket-detail',
@@ -38,8 +42,8 @@ export class TicketDetail {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly statusLabels = STATUS_LABELS;
-  protected readonly commentMin = COMMENT_MIN;
-  protected readonly commentMax = COMMENT_MAX;
+  protected readonly commentMin = COMMENT_MIN_LENGTH;
+  protected readonly commentMax = COMMENT_MAX_LENGTH;
 
   private readonly ticketId = signal(this.route.snapshot.paramMap.get('id')!);
 
@@ -55,7 +59,7 @@ export class TicketDetail {
   protected readonly canEdit = computed(() => !!this.ticket() && !this.savingStatus());
   protected readonly canComment = computed(() => {
     const t = this.ticket();
-    return !!t && t.status !== 'closed' && !this.submittingComment();
+    return !!t && canAddComment(t.status) && !this.submittingComment();
   });
   protected readonly nextStatuses = computed(() => {
     const t = this.ticket();
@@ -66,19 +70,12 @@ export class TicketDetail {
     return t ? slaState(t) : null;
   });
   protected readonly commentLength = computed(() => this.commentDraft().trim().length);
-  protected readonly commentValidationError = computed(() => {
-    if (!this.commentTouched() && !this.commentDraft()) {
-      return '';
-    }
-    const length = this.commentLength();
-    if (length < COMMENT_MIN) {
-      return `El comentario debe tener al menos ${COMMENT_MIN} caracteres (ahora ${length}).`;
-    }
-    if (this.commentDraft().length > COMMENT_MAX) {
-      return `El comentario no puede superar ${COMMENT_MAX} caracteres.`;
-    }
-    return '';
-  });
+  protected readonly commentValidationError = computed(
+    () =>
+      validateComment(this.commentDraft(), {
+        pristine: !this.commentTouched(),
+      }) ?? '',
+  );
   protected readonly commentInvalid = computed(() => !!this.commentValidationError());
 
   protected readonly prevId = computed(() => this.siblingId(-1));
@@ -158,7 +155,7 @@ export class TicketDetail {
     const current = this.ticket();
     this.commentTouched.set(true);
 
-    if (!current || current.status === 'closed' || this.submittingComment()) {
+    if (!current || !canAddComment(current.status) || this.submittingComment()) {
       return;
     }
     if (this.commentInvalid()) {
