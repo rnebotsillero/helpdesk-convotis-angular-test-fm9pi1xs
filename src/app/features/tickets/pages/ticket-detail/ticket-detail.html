@@ -36,6 +36,12 @@
           {{ statusLabels[s] }}
         </button>
       }
+      @if (savingStatus()) {
+        <p class="muted">Guardando estado…</p>
+      }
+      @if (statusError()) {
+        <p class="error" role="alert">{{ statusError() }}</p>
+      }
     </section>
   </article>
 

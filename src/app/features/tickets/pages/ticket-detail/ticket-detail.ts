@@ -2,11 +2,12 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -14,6 +15,9 @@ import { EMPTY, catchError, distinctUntilChanged, map, switchMap, timer } from '
 import { TicketsApi } from '../../data/tickets-api';
 import { STATUS_LABELS, Ticket, TicketStatus } from '../../models/ticket';
 import { slaState } from '../../domain/sla';
+
+const GENERIC_STATUS_ERROR =
+  'No se ha podido cambiar el estado. Inténtalo de nuevo.';
 
 @Component({
   selector: 'app-ticket-detail',
@@ -27,6 +31,7 @@ export class TicketDetail {
   private readonly api = inject(TicketsApi);
   private readonly route = inject(ActivatedRoute);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly statusLabels = STATUS_LABELS;
   protected readonly statuses = Object.keys(STATUS_LABELS) as TicketStatus[];
@@ -35,7 +40,9 @@ export class TicketDetail {
 
   protected readonly ticket = signal<Ticket | undefined>(undefined);
   protected readonly notFound = signal(false);
-  protected readonly canEdit = computed(() => !!this.ticket());
+  protected readonly savingStatus = signal(false);
+  protected readonly statusError = signal('');
+  protected readonly canEdit = computed(() => !!this.ticket() && !this.savingStatus());
   protected readonly sla = computed(() => {
     const t = this.ticket();
     return t ? slaState(t) : null;
@@ -55,6 +62,8 @@ export class TicketDetail {
         this.ticketId.set(id);
         this.ticket.set(undefined);
         this.notFound.set(false);
+        this.statusError.set('');
+        this.savingStatus.set(false);
 
         return timer(0, 5000).pipe(
           switchMap(() =>
@@ -75,14 +84,44 @@ export class TicketDetail {
   }
 
   protected changeStatus(status: TicketStatus): void {
-    const ticket = this.ticket()!;
-    ticket.status = status;
-    this.api.updateStatus(ticket.id, status).subscribe();
+    const current = this.ticket();
+    if (!current || this.savingStatus() || status === current.status) {
+      return;
+    }
+
+    this.savingStatus.set(true);
+    this.statusError.set('');
+
+    this.api
+      .updateStatus(current.id, status)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (dto) => {
+          this.ticket.set(this.api.toTicket(dto));
+          this.savingStatus.set(false);
+        },
+        error: (err: unknown) => {
+          this.statusError.set(this.serverErrorMessage(err, GENERIC_STATUS_ERROR));
+          this.savingStatus.set(false);
+        },
+      });
   }
 
   // Necesario para que se muestren el formato y las imágenes de los comentarios
   protected html(value: string): SafeHtml {
     return this.sanitizer.bypassSecurityTrustHtml(value);
+  }
+
+  /** El fake-api pone el mensaje en `statusText` (p. ej. 409 Conflict: …). */
+  private serverErrorMessage(err: unknown, fallback: string): string {
+    if (!(err instanceof HttpErrorResponse)) {
+      return fallback;
+    }
+    const text = err.statusText?.trim();
+    if (!text || text === 'Unknown Error' || text === 'Http failure response') {
+      return fallback;
+    }
+    return text;
   }
 
   private siblingId(offset: number): string {
