@@ -10,7 +10,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { EMPTY, catchError, distinctUntilChanged, map, switchMap, timer } from 'rxjs';
 import { TicketsApi } from '../../data/tickets-api';
 import { STATUS_LABELS, Ticket, TicketStatus } from '../../models/ticket';
@@ -31,7 +30,6 @@ export class TicketDetail {
   private readonly http = inject(HttpClient);
   private readonly api = inject(TicketsApi);
   private readonly route = inject(ActivatedRoute);
-  private readonly sanitizer = inject(DomSanitizer);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly statusLabels = STATUS_LABELS;
@@ -114,11 +112,6 @@ export class TicketDetail {
           this.savingStatus.set(false);
         },
       });
-  }
-
-  // Necesario para que se muestren el formato y las imágenes de los comentarios
-  protected html(value: string): SafeHtml {
-    return this.sanitizer.bypassSecurityTrustHtml(value);
   }
 
   /** El fake-api pone el mensaje en `statusText` (p. ej. 409 Conflict: …). */
