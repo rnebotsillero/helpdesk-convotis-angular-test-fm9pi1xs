@@ -4,14 +4,29 @@
   <input
     type="search"
     placeholder="Buscar por título o ID…"
-    [ngModel]="search"
+    [ngModel]="searchDraft()"
     (ngModelChange)="onSearch($event)"
   />
 
-  <select (change)="statusFilter.set($any($event.target).value)">
+  <select
+    [ngModel]="statusFilter()"
+    (ngModelChange)="onStatusChange($event)"
+    aria-label="Filtrar por estado"
+  >
     <option value="all">Todos los estados</option>
     @for (s of statuses; track s) {
       <option [value]="s">{{ statusLabels[s] }}</option>
+    }
+  </select>
+
+  <select
+    [ngModel]="priorityFilter()"
+    (ngModelChange)="onPriorityChange($event)"
+    aria-label="Filtrar por prioridad"
+  >
+    <option value="all">Todas las prioridades</option>
+    @for (p of priorities; track p) {
+      <option [value]="p">{{ priorityLabels[p] }}</option>
     }
   </select>
 </section>
@@ -25,9 +40,11 @@
 }
 
 <div class="list">
-  @for (ticket of filtered(); track ticket.id) {
+  @for (ticket of tickets(); track ticket.id) {
     <app-ticket-row [ticket]="ticket" (click)="open(ticket)" />
   } @empty {
-    <p class="muted">No hay tickets que mostrar.</p>
+    @if (!loading() && !errorMessage()) {
+      <p class="muted">No hay tickets que mostrar.</p>
+    }
   }
 </div>

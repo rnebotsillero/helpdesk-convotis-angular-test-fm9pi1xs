@@ -27,3 +27,10 @@ export const STATUS_LABELS: Record<TicketStatus, string> = {
   waiting_customer: 'Esperando cliente',
   closed: 'Cerrado',
 };
+
+export const PRIORITY_LABELS: Record<TicketPriority, string> = {
+  critical: 'Crítica',
+  high: 'Alta',
+  medium: 'Media',
+  low: 'Baja',
+};

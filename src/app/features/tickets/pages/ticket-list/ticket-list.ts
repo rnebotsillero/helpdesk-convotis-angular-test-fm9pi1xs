@@ -1,20 +1,32 @@
-import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   EMPTY,
   Subject,
   catchError,
   debounceTime,
   distinctUntilChanged,
-  merge,
-  of,
+  map,
   switchMap,
   tap,
 } from 'rxjs';
-import { TicketsApi } from '../../data/tickets-api';
-import { STATUS_LABELS, Ticket, TicketStatus } from '../../models/ticket';
+import { TicketSearchParams, TicketsApi } from '../../data/tickets-api';
+import {
+  PRIORITY_LABELS,
+  STATUS_LABELS,
+  Ticket,
+  TicketPriority,
+  TicketStatus,
+} from '../../models/ticket';
 import { TicketRow } from '../../components/ticket-row/ticket-row';
 
 @Component({
@@ -27,35 +39,57 @@ import { TicketRow } from '../../components/ticket-row/ticket-row';
 export class TicketList {
   private readonly api = inject(TicketsApi);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly searchInput = new Subject<string>();
 
   protected readonly statusLabels = STATUS_LABELS;
+  protected readonly priorityLabels = PRIORITY_LABELS;
   protected readonly statuses = Object.keys(STATUS_LABELS) as TicketStatus[];
+  protected readonly priorities = Object.keys(PRIORITY_LABELS) as TicketPriority[];
+
+  private readonly queryParams = toSignal(this.route.queryParamMap, { requireSync: true });
+
+  protected readonly searchFromUrl = computed(() => this.queryParams().get('q') ?? '');
+  /** Borrador local para no perder teclas mientras el debounce escribe en la URL. */
+  protected readonly searchDraft = signal(this.searchFromUrl());
+  protected readonly statusFilter = computed(() => {
+    const value = this.queryParams().get('status');
+    return this.isStatus(value) ? value : 'all';
+  });
+  protected readonly priorityFilter = computed(() => {
+    const value = this.queryParams().get('priority');
+    return this.isPriority(value) ? value : 'all';
+  });
 
   protected readonly tickets = signal<Ticket[]>([]);
-  protected readonly filtered = signal<Ticket[]>([]);
-  protected readonly statusFilter = signal<TicketStatus | 'all'>('all');
   protected readonly loading = signal(false);
   protected readonly errorMessage = signal('');
 
-  protected search = '';
-
   constructor() {
+    // Atrás/adelante / reload: alinear el input con la URL
     effect(() => {
-      const status = this.statusFilter();
-      this.filtered.set(this.tickets().filter((t) => status === 'all' || t.status === status));
+      this.searchDraft.set(this.searchFromUrl());
     });
 
-    // Carga inicial inmediata; teclas con debounce. switchMap cancela la petición anterior.
-    merge(of(this.search), this.searchInput.pipe(debounceTime(300)))
+    // Texto → debounce → URL (fuente de verdad)
+    this.searchInput
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
+      .subscribe((q) => this.patchQuery({ q: q.trim() || null }));
+
+    // URL → API (reload y atrás/adelante incluidos)
+    this.route.queryParamMap
       .pipe(
-        distinctUntilChanged(),
+        map((params) => this.filtersFromParams(params)),
+        distinctUntilChanged(
+          (a, b) => a.q === b.q && a.status === b.status && a.priority === b.priority,
+        ),
         tap(() => {
+          this.tickets.set([]);
           this.loading.set(true);
           this.errorMessage.set('');
         }),
-        switchMap((term) =>
-          this.api.search(term).pipe(
+        switchMap((filters) =>
+          this.api.search(filters).pipe(
             catchError(() => {
               this.tickets.set([]);
               this.errorMessage.set('No se han podido cargar los tickets.');
@@ -73,11 +107,47 @@ export class TicketList {
   }
 
   protected onSearch(term: string): void {
-    this.search = term;
+    this.searchDraft.set(term);
     this.searchInput.next(term);
   }
 
+  protected onStatusChange(value: string): void {
+    this.patchQuery({ status: value === 'all' ? null : value });
+  }
+
+  protected onPriorityChange(value: string): void {
+    this.patchQuery({ priority: value === 'all' ? null : value });
+  }
+
   protected open(ticket: Ticket): void {
-    this.router.navigate(['/tickets', ticket.id]);
+    void this.router.navigate(['/tickets', ticket.id], {
+      queryParamsHandling: 'preserve',
+    });
+  }
+
+  private patchQuery(queryParams: Record<string, string | null>): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams,
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private filtersFromParams(params: { get(name: string): string | null }): TicketSearchParams {
+    const status = params.get('status');
+    const priority = params.get('priority');
+    return {
+      q: params.get('q') ?? '',
+      status: this.isStatus(status) ? status : undefined,
+      priority: this.isPriority(priority) ? priority : undefined,
+    };
+  }
+
+  private isStatus(value: string | null): value is TicketStatus {
+    return !!value && value in STATUS_LABELS;
+  }
+
+  private isPriority(value: string | null): value is TicketPriority {
+    return !!value && value in PRIORITY_LABELS;
   }
 }

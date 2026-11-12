@@ -1,15 +1,27 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
-import { Ticket, TicketStatus } from '../models/ticket';
+import { Ticket, TicketPriority, TicketStatus } from '../models/ticket';
+
+export interface TicketSearchParams {
+  q?: string;
+  status?: TicketStatus;
+  priority?: TicketPriority;
+}
 
 @Injectable({ providedIn: 'root' })
 export class TicketsApi {
   private readonly http = inject(HttpClient);
 
-  search(q: string): Observable<Ticket[]> {
+  search(filters: TicketSearchParams): Observable<Ticket[]> {
+    const params: Record<string, string> = {};
+    const q = filters.q?.trim();
+    if (q) params['q'] = q;
+    if (filters.status) params['status'] = filters.status;
+    if (filters.priority) params['priority'] = filters.priority;
+
     return this.http
-      .get<any[]>('/api/tickets', { params: { q } })
+      .get<any[]>('/api/tickets', { params })
       .pipe(map((list) => list.map((dto) => this.toTicket(dto))));
   }
 

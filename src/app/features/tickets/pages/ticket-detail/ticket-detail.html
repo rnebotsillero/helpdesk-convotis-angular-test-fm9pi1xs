@@ -1,8 +1,8 @@
 <nav class="nav">
-  <a routerLink="/tickets">← Volver al listado</a>
+  <a routerLink="/tickets" queryParamsHandling="preserve">← Volver al listado</a>
   <span class="spacer"></span>
-  <a [routerLink]="['/tickets', prevId()]">‹ Anterior</a>
-  <a [routerLink]="['/tickets', nextId()]">Siguiente ›</a>
+  <a [routerLink]="['/tickets', prevId()]" queryParamsHandling="preserve">‹ Anterior</a>
+  <a [routerLink]="['/tickets', nextId()]" queryParamsHandling="preserve">Siguiente ›</a>
 </nav>
 
 @if (notFound()) {
